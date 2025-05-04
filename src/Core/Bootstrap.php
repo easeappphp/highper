@@ -8,6 +8,7 @@ use EaseAppPHP\HighPer\Framework\Config\ConfigProvider;
 use EaseAppPHP\HighPer\Framework\Http\Middleware\Security\CorsMiddleware;
 use EaseAppPHP\HighPer\Framework\Http\Middleware\Security\RateLimitingMiddleware;
 use EaseAppPHP\HighPer\Framework\Http\Middleware\Security\SecurityMiddleware;
+use EaseAppPHP\HighPer\Framework\Error\ErrorHandler;
 
 class Bootstrap
 {
@@ -15,6 +16,9 @@ class Bootstrap
      * @var Application The application instance
      */
     protected Application $app;
+	
+	// Set to true for development, false for production
+    $debug = true; 
 
     /**
      * Create a new bootstrap instance
@@ -33,7 +37,11 @@ class Bootstrap
      */
     public function bootstrap(): void
     {
-        $this->registerServiceProviders();
+        ErrorHandler::initialize($debug, [
+			'version' => 'Highper v1.0',
+			'editor' => 'vscode', // or any supported editor
+		]);
+		$this->registerServiceProviders();
         $this->registerMiddleware();
         $this->registerRoutes();
     }

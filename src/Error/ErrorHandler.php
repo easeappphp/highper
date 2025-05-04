@@ -4,179 +4,167 @@ declare(strict_types=1);
 
 namespace EaseAppPHP\HighPer\Framework\Error;
 
-use EaseAppPHP\HighPer\Framework\Config\ConfigProvider;
-use Psr\Container\ContainerInterface;
-use Psr\Log\LoggerInterface;
-use Whoops\Handler\JsonResponseHandler;
+use Whoops\Run;
 use Whoops\Handler\PrettyPageHandler;
-use Whoops\Run as Whoops;
+use Whoops\Handler\JsonResponseHandler;
+use Whoops\Util\Misc;
+use EaseAppPHP\HighPer\Framework\Exceptions\BaseException;
+use EaseAppPHP\HighPer\Framework\Exceptions\DatabaseException;
 
+/**
+ * Enhanced ErrorHandler that integrates with filp/whoops
+ */
 class ErrorHandler
 {
     /**
-     * @var ContainerInterface The container
+     * @var Run|null The Whoops instance
      */
-    protected ContainerInterface $container;
+    protected static ?Run $whoops = null;
     
     /**
-     * @var ConfigProvider The config provider
+     * @var bool Whether debug mode is enabled
      */
-    protected ConfigProvider $config;
+    protected static bool $debug = false;
     
     /**
-     * @var LoggerInterface|null The logger
-     */
-    protected ?LoggerInterface $logger = null;
-    
-    /**
-     * @var Whoops|null The Whoops instance
-     */
-    protected ?Whoops $whoops = null;
-
-    /**
-     * Create a new error handler
+     * Initialize the error handler
      *
-     * @param ContainerInterface $container
-     */
-    public function __construct(ContainerInterface $container)
-    {
-        $this->container = $container;
-        $this->config = $container->get(ConfigProvider::class);
-        
-        if ($container->has(LoggerInterface::class)) {
-            $this->logger = $container->get(LoggerInterface::class);
-        }
-    }
-
-    /**
-     * Register the error handler
-     *
+     * @param bool $debug Whether to show detailed error information
+     * @param array $options Additional options for the error handler
      * @return void
      */
-    public function register(): void
+    public static function initialize(bool $debug = false, array $options = []): void
     {
-        $this->registerWhoops();
-        $this->registerErrorHandler();
-        $this->registerExceptionHandler();
-        $this->registerShutdownFunction();
-    }
-
-    /**
-     * Register Whoops
-     *
-     * @return void
-     */
-    protected function registerWhoops(): void
-    {
-        $this->whoops = new Whoops();
+        self::$debug = $debug;
         
-        $environment = $this->config->get('app.environment', 'production');
+        // Create a new Whoops instance
+        self::$whoops = new Run();
         
-        if ($environment === 'development') {
-            // Use the pretty page handler in development
-            $handler = new PrettyPageHandler();
+        // First, check if it's an AJAX request
+        if (Misc::isAjaxRequest()) {
+            $jsonHandler = new JsonResponseHandler();
+            $jsonHandler->addTraceToOutput($debug);
             
-            // Add some application paths to the handler
-            $handler->setApplicationPaths([
-                $this->config->get('app.base_path', ''),
+            // Set JSON API format if specified
+            if (isset($options['jsonApi']) && $options['jsonApi']) {
+                $jsonHandler->setJsonApi(true);
+            }
+            
+            self::$whoops->pushHandler($jsonHandler);
+        }
+        
+        // In debug mode, use PrettyPageHandler
+        if ($debug) {
+            $prettyPageHandler = new PrettyPageHandler();
+            
+            // Set page title
+            $prettyPageHandler->setPageTitle("Highper Framework Error");
+            
+            // Add Highper-specific information
+            $prettyPageHandler->addDataTable('Highper Framework Info', [
+                'Version' => $options['version'] ?? 'Highper v1.0',
+                'Environment' => $debug ? 'Development' : 'Production',
+                'PHP Version' => phpversion(),
+                'Request Time' => date('Y-m-d H:i:s'),
             ]);
             
-            $this->whoops->pushHandler($handler);
+            // Set editor if provided
+            if (isset($options['editor'])) {
+                $prettyPageHandler->setEditor($options['editor']);
+            }
+            
+            self::$whoops->pushHandler($prettyPageHandler);
         } else {
-            // Use the JSON response handler in production
-            $handler = new JsonResponseHandler();
-            
-            // Only show the error message in production
-            $handler->addTraceToOutput(false);
-            
-            $this->whoops->pushHandler($handler);
+            // In production, use a simpler error handler
+            self::$whoops->pushHandler(function ($exception, $inspector, $run) {
+                http_response_code(500);
+                
+                if ($exception instanceof BaseException) {
+                    $statusCode = $exception->getStatusCode();
+                    http_response_code($statusCode);
+                    
+                    echo $exception->getUserMessage();
+                    
+                    if ($exception->shouldLog()) {
+                        // Log the exception if logging is enabled
+                        error_log((string) $exception);
+                    }
+                } else {
+                    echo "An error occurred. Please try again later.";
+                    error_log((string) $exception);
+                }
+                
+                return \Whoops\Handler\Handler::QUIT;
+            });
         }
         
-        $this->whoops->register();
+        // Register the error handler
+        self::$whoops->register();
     }
-
+    
     /**
-     * Register the error handler
+     * Add a custom handler to Whoops
      *
+     * @param callable|\Whoops\Handler\HandlerInterface $handler The handler to add
+     * @param bool $append Whether to append the handler or prepend it
      * @return void
      */
-    protected function registerErrorHandler(): void
+    public static function addHandler($handler, bool $append = true): void
     {
-        set_error_handler(function (int $level, string $message, string $file = '', int $line = 0) {
-            if (error_reporting() & $level) {
-                throw new \ErrorException($message, 0, $level, $file, $line);
-            }
-        });
-    }
-
-    /**
-     * Register the exception handler
-     *
-     * @return void
-     */
-    protected function registerExceptionHandler(): void
-    {
-        set_exception_handler(function (\Throwable $e) {
-            $this->handleException($e);
-        });
-    }
-
-    /**
-     * Register the shutdown function
-     *
-     * @return void
-     */
-    protected function registerShutdownFunction(): void
-    {
-        register_shutdown_function(function () {
-            $error = error_get_last();
-            
-            if ($error !== null && $this->isFatalError($error['type'])) {
-                $this->handleException(new \ErrorException(
-                    $error['message'],
-                    0,
-                    $error['type'],
-                    $error['file'],
-                    $error['line']
-                ));
-            }
-        });
-    }
-
-    /**
-     * Handle an exception
-     *
-     * @param \Throwable $e
-     * @return void
-     */
-    public function handleException(\Throwable $e): void
-    {
-        // Log the exception
-        if ($this->logger) {
-            $this->logger->error($e->getMessage(), [
-                'exception' => $e,
-            ]);
+        if (self::$whoops === null) {
+            self::initialize(self::$debug);
         }
         
-        // Let Whoops handle the exception
-        if ($this->whoops) {
-            $this->whoops->handleException($e);
+        if ($append) {
+            self::$whoops->pushHandler($handler);
+        } else {
+            self::$whoops->prependHandler($handler);
         }
     }
-
+    
     /**
-     * Determine if the error type is fatal
+     * Add data to the pretty page handler
      *
-     * @param int $type
-     * @return bool
+     * @param string $label The label for the data table
+     * @param array $data The data to display
+     * @return void
      */
-    protected function isFatalError(int $type): bool
+    public static function addDataTable(string $label, array $data): void
     {
-        return in_array($type, [
-            E_ERROR,
-            E_CORE_ERROR,
-            E_COMPILE_ERROR,
-            E_PARSE,
-        ]);
+        if (self::$whoops === null) {
+            self::initialize(self::$debug);
+        }
+        
+        foreach (self::$whoops->getHandlers() as $handler) {
+            if ($handler instanceof PrettyPageHandler) {
+                $handler->addDataTable($label, $data);
+                break;
+            }
+        }
+    }
+    
+    /**
+     * Get the Whoops instance
+     *
+     * @return Run|null The Whoops instance
+     */
+    public static function getWhoops(): ?Run
+    {
+        return self::$whoops;
+    }
+    
+    /**
+     * Handle an exception manually
+     *
+     * @param \Throwable $exception The exception to handle
+     * @return void
+     */
+    public static function handleException(\Throwable $exception): void
+    {
+        if (self::$whoops === null) {
+            self::initialize(self::$debug);
+        }
+        
+        self::$whoops->handleException($exception);
     }
 }
