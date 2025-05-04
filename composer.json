@@ -20,6 +20,7 @@
         "amphp/parallel": "^2.0",
         "amphp/http-client": "^5.0",
         "amphp/log": "^2.0",
+		"amphp/mysql": "^3.0",
         "illuminate/container": "^10.0",
         "psr/http-message": "^1.0",
         "psr/http-factory": "^1.0",
