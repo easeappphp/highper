@@ -4,9 +4,6 @@ declare(strict_types=1);
 
 namespace EaseAppPHP\HighPer\Framework\Core;
 
-use Psr\Log\LoggerInterface;
-use EaseAppPHP\HighPer\Framework\Logging\LoggerFactory;
-
 abstract class ServiceProvider
 {
     /**
@@ -23,25 +20,7 @@ abstract class ServiceProvider
      *
      * @return void
      */
-    //abstract public function register(): void;
-	
-	/**
-     * Register core services in the container
-     * 
-     * @param \Illuminate\Container\Container $container
-     * @return void
-     */
-    public function register($container): void
-    {
-        // Register PSR-3 LoggerInterface
-        $container->singleton(LoggerInterface::class, function () {
-            return LoggerFactory::createLogger(
-                'highper',                 // Logger name
-                null,                      // Log to stdout by default
-                true                       // Enable debug logging
-            );
-        });
-    }
+    abstract public function register(): void;
 
     /**
      * Boot services

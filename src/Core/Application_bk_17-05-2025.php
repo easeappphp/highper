@@ -61,37 +61,15 @@ class Application
      */
     protected function bootstrap(): void
     {
-        // Load Environment Variables
-		$this->loadEnvironmentVariables();
-		
-		// Initialize the container first
+        $this->loadEnvironmentVariables();
         $this->initializeContainer();
-		
-		// Register base bindings
-		$this->registerBaseBindings();
-		
-		// Register Base Service Providers
+        $this->registerBaseBindings();
         $this->registerBaseServiceProviders();
-        
-        // Register the logger before error handling so it can be used for error logging
-        $this->registerLogger();
-        
-        // Then initialize error handling
         $this->initializeErrorHandling();
-        
-        // Initialize Event Loop      
         $this->initializeEventLoop();
-		
-		//Initialize Router
         $this->initializeRouter();
-		
-		//Initialize Middleware
         $this->initializeMiddleware();
-		
-		//Initialize Logger
-        //$this->initializeLogger();
-		
-		//Initialize Tracing
+        $this->initializeLogger();
         $this->initializeTracing();
     }
 
@@ -135,38 +113,15 @@ class Application
     {
         // This will be implemented in later versions
     }
-	
-	/**
-     * Register the logger in the container
-     *
-     * @return void
-     */
-    protected function registerLogger(): void
-    {
-        $this->container->singleton(LoggerInterface::class, function () {
-            return LoggerFactory::createLogger('highper');
-        });
-    }
 
     /**
      * Initialize error handling
      */
-    /*protected function initializeErrorHandling(): void
+    protected function initializeErrorHandling(): void
     {
         $errorHandler = new ErrorHandler($this->container);
         $errorHandler->register();
         $this->container->instance(ErrorHandler::class, $errorHandler);
-    }*/
-	
-	/**
-     * Initialize error handling
-     *
-     * @return void
-     */
-    protected function initializeErrorHandling(): void
-    {
-        $errorHandler = new ErrorHandler();
-        $errorHandler->register($this->isDebugMode());
     }
 
     /**
@@ -200,12 +155,12 @@ class Application
     /**
      * Initialize the logger
      */
-    /*protected function initializeLogger(): void
+    protected function initializeLogger(): void
     {
         $logger = (new LoggerFactory($this->container))->create();
         $this->logger = $logger;
         $this->container->instance(LoggerInterface::class, $logger);
-    }*/
+    }
 
     /**
      * Initialize tracing
@@ -304,25 +259,4 @@ class Application
     {
         return $this->basePath . ($path ? DIRECTORY_SEPARATOR . $path : $path);
     }
-	
-	/**
-	 * Determine if the application is in debug mode
-	 * 
-	 * @return bool
-	 */
-	protected function isDebugMode(): bool
-	{
-		// Check for APP_DEBUG environment variable, if not set, assume true for development
-		$appDebug = getenv('APP_DEBUG');
-		
-		if ($appDebug !== false) {
-			return filter_var($appDebug, FILTER_VALIDATE_BOOLEAN);
-		}
-		
-		// Check for APP_ENV environment variable to determine environment
-		$appEnv = getenv('APP_ENV') ?: 'development';
-		
-		// Consider 'development' and 'local' as debug mode environments
-		return in_array(strtolower($appEnv), ['development', 'local']);
-	}
 }
