@@ -44,7 +44,7 @@
     },
     "autoload": {
         "psr-4": {
-            "EaseAppPHP\\HighPer\\": "src/"
+            "EaseAppPHP\\HighPer\\Framework\\": "src/"
         }
     },
     "autoload-dev": {
