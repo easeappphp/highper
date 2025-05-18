@@ -1,7 +1,5 @@
 <?php
 
-declare(strict_types=1);
-
 namespace EaseAppPHP\HighPer\Framework\Tracing;
 
 use OpenTelemetry\API\Trace\Span;
@@ -31,13 +29,13 @@ class OpenTelemetryFactory
     /**
      * Create a tracer based on configuration.
      *
-     * @param array $config OpenTelemetry configuration array
+     * @param array $config Optional OpenTelemetry configuration array
      * @return TracerInterface The configured tracer
      */
-    public static function create(array $config): TracerInterface
+    public static function create(array $config = []): TracerInterface
     {
         // If tracing is not enabled, return a no-op tracer
-        if (!isset($config['enabled']) || $config['enabled'] !== true) {
+        if (empty($config) || !isset($config['enabled']) || $config['enabled'] !== true) {
             return self::createNoOpTracer();
         }
 

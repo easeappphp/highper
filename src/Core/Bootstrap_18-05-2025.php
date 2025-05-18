@@ -16,10 +16,10 @@ class Bootstrap
      * @var Application The application instance
      */
     protected Application $app;
-   
-    // Set to true for development, false for production
-    protected bool $debug = true;
 	
+	// Set to true for development, false for production
+    protected bool $debug = true; 
+
     /**
      * Create a new bootstrap instance
      *
@@ -29,7 +29,7 @@ class Bootstrap
     {
         $this->app = $app;
     }
-	
+
     /**
      * Bootstrap the application
      *
@@ -37,17 +37,15 @@ class Bootstrap
      */
     public function bootstrap(): void
     {
-        // Use the static initialize method for backward compatibility
         ErrorHandler::initialize($this->debug, [
-            'version' => 'Highper v1.0',
-            'editor' => 'vscode', // or any supported editor
-        ]);
-        
-        $this->registerServiceProviders();
+			'version' => 'Highper v1.0',
+			'editor' => 'vscode', // or any supported editor
+		]);
+		$this->registerServiceProviders();
         $this->registerMiddleware();
         $this->registerRoutes();
     }
-	
+
     /**
      * Register service providers
      *
@@ -57,12 +55,12 @@ class Bootstrap
     {
         $config = $this->app->getContainer()->get(ConfigProvider::class);
         $providers = $config->get('app.providers', []);
-       
+        
         foreach ($providers as $provider) {
             $this->app->register($provider);
         }
     }
-	
+
     /**
      * Register middleware
      *
@@ -71,19 +69,19 @@ class Bootstrap
     protected function registerMiddleware(): void
     {
         $config = $this->app->getContainer()->get(ConfigProvider::class);
-       
+        
         // Register global middleware
         $middleware = $config->get('middleware.global', [
             SecurityMiddleware::class,
             CorsMiddleware::class,
             RateLimitingMiddleware::class,
         ]);
-       
+        
         foreach ($middleware as $class) {
             $this->app->addMiddleware($class);
         }
     }
-	
+
     /**
      * Register routes
      *
@@ -92,15 +90,15 @@ class Bootstrap
     protected function registerRoutes(): void
     {
         $routesPath = $this->app->basePath('routes');
-       
+        
         // Load route files
         if (is_dir($routesPath)) {
             $files = glob($routesPath . '/*.php');
-           
+            
             foreach ($files as $file) {
                 // Each route file should return a closure that accepts the application instance
                 $routeRegistrar = require $file;
-               
+                
                 if (is_callable($routeRegistrar)) {
                     $routeRegistrar($this->app);
                 }

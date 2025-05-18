@@ -6,22 +6,24 @@ namespace EaseAppPHP\HighPer\Framework\Http\Server;
 
 use Amp\Http\Server\DefaultErrorHandler;
 use Amp\Http\Server\Driver\DefaultHttpDriverFactory;
-use Amp\Http\Server\HttpServer;
-use Amp\Http\Server\RequestHandler\CallableRequestHandler;
+use Amp\Http\Server\RequestHandler\ClosureRequestHandler;
+use Amp\Http\Server\SocketHttpServer; // Added SocketHttpServer
 use Amp\Socket\BindContext;
-use Amp\Socket\ServerSocket;
+use Amp\Socket\InternetAddress;
+use function Amp\Socket\listen;
 use EaseAppPHP\HighPer\Framework\Http\Middleware\MiddlewareDispatcher;
 use EaseAppPHP\HighPer\Framework\Http\Router\Router;
 use Psr\Container\ContainerInterface;
 use Psr\Log\LoggerInterface;
 use Revolt\EventLoop;
+use function Amp\trapSignal;
 
 class Server
 {
     /**
-     * @var HttpServer The AmPHP HTTP server instance
+     * @var SocketHttpServer The AmPHP HTTP server instance
      */
-    protected HttpServer $server;
+    protected SocketHttpServer $server;
     
     /**
      * @var Router The router
@@ -59,36 +61,50 @@ class Server
      */
     public function start(string $host, int $port): void
     {
-        $sockets = [
-            ServerSocket::listen("$host:$port", (new BindContext())->withBacklog(1024))
-        ];
+        try {
+            // Create the server with direct access
+            //$this->server = SocketHttpServer::createForDirectAccess($this->logger);
+			$this->server = SocketHttpServer::createForDirectAccess(
+				$this->logger,  // First parameter: logger
+				true,          // Second parameter: enableCompression (boolean, not null)
+			);
+            
+			$this->logger->info("SocketHttpServer exposing on $host:$port");
+			
+            // Expose the address to listen on
+            $this->server->expose(new InternetAddress($host, $port));
+            
+			$this->logger->info("Successfully exposed on $host:$port");
+			
+            $this->logger->info("Starting server at http://$host:$port");
+            
+            // Create the final request handler that combines the middleware pipeline with the router
+            $requestHandler = new ClosureRequestHandler(function ($request) {
+                return $this->middlewareDispatcher->handle($request);
+            });
+            
+            // Create error handler
+            $errorHandler = new DefaultErrorHandler();
+            
+            // Start the server with the request handler and error handler
+            $this->server->start($requestHandler, $errorHandler);
+            
+            // Register server shutdown on loop termination
+            EventLoop::onSignal(SIGINT, function () {
+                $this->stop();
+            });
+            
+            EventLoop::onSignal(SIGTERM, function () {
+                $this->stop();
+            });
 
-        $this->logger->info("Starting server at http://$host:$port");
-
-        // Create the final request handler that combines the middleware pipeline with the router
-        $requestHandler = new CallableRequestHandler(function ($request) {
-            return $this->middlewareDispatcher->handle($request);
-        });
-
-        // Create the HTTP server
-        $this->server = new HttpServer(
-            $sockets,
-            $requestHandler,
-            $this->logger,
-            (new DefaultHttpDriverFactory())->withConnectionLimit(10000000) // C10M support
-        );
-
-        // Register server shutdown on loop termination
-        EventLoop::onSignal(SIGINT, function () {
-            $this->stop();
-        });
-
-        EventLoop::onSignal(SIGTERM, function () {
-            $this->stop();
-        });
-
-        // Start the server
-        $this->server->start();
+        } catch (\Throwable $e) {
+            $this->logger->error('Server failed to start: ' . $e->getMessage(), [
+                'exception' => $e,
+                'trace' => $e->getTraceAsString()
+            ]);
+            throw $e;
+        }
     }
 
     /**
@@ -98,8 +114,26 @@ class Server
      */
     public function stop(): void
     {
-        $this->logger->info("Stopping server");
-        $this->server->stop();
-        EventLoop::stop();
+        try {
+            $this->logger->info("Stopping server gracefully");
+            $this->server->stop();
+            $this->logger->info("Server stopped successfully");
+        } catch (\Throwable $e) {
+            $this->logger->error('Error while stopping server: ' . $e->getMessage(), [
+                'exception' => $e
+            ]);
+        } finally {
+            EventLoop::stop();
+        }
+    }
+    
+    /**
+     * Check if the server is running
+     *
+     * @return bool
+     */
+    public function isRunning(): bool
+    {
+        return isset($this->server) && $this->server instanceof SocketHttpServer;
     }
 }
