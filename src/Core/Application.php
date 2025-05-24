@@ -15,6 +15,7 @@ use EaseAppPHP\HighPer\Framework\Http\Router\Router;
 use EaseAppPHP\HighPer\Framework\Http\Server\Server;
 use EaseAppPHP\HighPer\Framework\Logging\LoggerFactory;
 use EaseAppPHP\HighPer\Framework\Tracing\OpenTelemetryFactory;
+use EaseAppPHP\HighPer\Framework\Core\EAIsConsole;
 use Psr\Container\ContainerInterface;
 use Psr\Log\LoggerInterface;
 use Revolt\EventLoop;
@@ -25,7 +26,13 @@ class Application
      * @var ContainerInterface The service container
      */
     protected ContainerInterface $container;
-
+    
+	/**
+     * @var EAIsConsole The IsConsole instance
+     */
+	protected $eaIsConsoleinstance;
+    protected $eaRequestConsoleStatusResult;
+	
     /**
      * @var Router The router instance
      */
@@ -72,6 +79,14 @@ class Application
 		
 		// Register Base Service Providers
         $this->registerBaseServiceProviders();
+		
+		//Check if the request is based upon Console or Web
+		$eaIsConsole = new EAIsConsole();
+		$this->container->instance('EAIsConsole', $eaIsConsole);
+		
+		//Save EA REQUEST Console Status Result to Container
+		$this->container->instance('EARequestConsoleStatusResult', $this->container->get('EAIsConsole')->checkSTDIN());
+		$this->eaRequestConsoleStatusResult = $this->container->get('EARequestConsoleStatusResult'); 
         
         // Register the logger before error handling so it can be used for error logging
         $this->registerLogger();
@@ -284,14 +299,18 @@ class Application
     public function run(?string $host = null, ?int $port = null): void
     {
         $config = $this->container->get('config');
-        $host = $host ?? $config->get('app.host', '127.0.0.1');
-        $port = $port ?? $config->get('app.port', 8080);
+        if ($this->container->get('EARequestConsoleStatusResult') == "Console") {
+		//$host = $host ?? $config->get('app.host', '127.0.0.1');
+        //$port = $port ?? $config->get('app.port', 8080);
+		$host = $host ?? $config->get('app.host', '0.0.0.0');
+        $port = $port ?? $config->get('app.port', 5000);
 
         $server = $this->container->make(Server::class);
         $server->start($host, $port);
         
         // Run the event loop
         EventLoop::run();
+		}
     }
 
     /**
